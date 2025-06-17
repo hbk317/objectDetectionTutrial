@@ -1,0 +1,7 @@
+train: train
+val: val
+
+# number of classes
+nc: 3
+
+names: ['purple', 'yellow', 'red']
