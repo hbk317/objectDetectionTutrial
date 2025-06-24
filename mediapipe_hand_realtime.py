@@ -1,9 +1,18 @@
 # https://qiita.com/yuki5130/items/269f227c7b1571529d40#%E3%82%B3%E3%83%BC%E3%83%89 を改変
 import os
+
 import cv2
+import mediapipe as mp
 
-from ultralytics import YOLO
 
+mp_hands = mp.solutions.hands
+hand = mp_hands.Hands(
+    model_complexity=1,
+    min_detection_confidence=0,
+    max_num_hands=2,
+)
+mp_drawing = mp.solutions.drawing_utils
+# mp_drawing._VISIBILITY_THRESHOLD = 0  # 描画するvisibilityの閾値
 
 # 動画キャプチャの初期化
 cap = cv2.VideoCapture(0)  # PCの内カメラから画像を取得
@@ -15,16 +24,10 @@ if not cap.isOpened():
 # ウィンドウサイズを変更するスケール（例: 0.5 で半分の大きさ）
 resize_scale = 1.0
 
-# 推論に用いるモデルを読み込む
-model_path = "yolov8n.pt"  # 事前学習時点のモデル
-# model_path = "runs/detect/n/train_includeSubjectsData/weights/best.pt"  # ぬいぐるみしか検出できないので使わない
-model = YOLO(model_path)
-
 # 保存する動画の設定
-output_filename = "result/yolo_realtime.mp4"
+output_filename = "result/realtime/mediapipe_hand.mp4"
 if not os.path.exists("result/realtime"):
     os.makedirs("result/realtime")
-
 fps = int(cap.get(cv2.CAP_PROP_FPS)) if cap.get(cv2.CAP_PROP_FPS) > 0 else 30
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * resize_scale)  # 縮小後の幅
 frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) * resize_scale)  # 縮小後の高さ
@@ -38,19 +41,34 @@ while True:
         print("Error: フレームを取得できませんでした。")
         break
 
+    # フレームの高さと幅を取得
+    height, width, _ = frame.shape
+
+    # フレームサイズを縮小
+    small_frame = cv2.resize(frame, (int(width * resize_scale), int(height * resize_scale)))
+
+    # BGRからRGBに変換（Mediapipeが必要とするフォーマット）
+    frame_rgb = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+
     # Mediapipeで骨格検出を実行
-    results = model.track(frame, persist=True)
+    result = hand.process(frame_rgb)
 
     # 検出結果を描画
-    frame = results[0].plot()
+    if result.multi_hand_landmarks:
+        for hand_landmarks in result.multi_hand_landmarks:
+            mp_drawing.draw_landmarks(
+                small_frame,
+                hand_landmarks,
+                mp_hands.HAND_CONNECTIONS
+            )
 
     # 縮小されたフレームを保存
-    out.write(frame)
+    out.write(small_frame)
 
     # 縮小されたフレームを表示
-    cv2.imshow('Object Detection', frame)
+    cv2.imshow('Pose Detection', small_frame)
 
-    # 映像が表示されているウィンドウを選んだ状態で'q'キーで終了
+    # 'q'キーで終了
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
